@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
 import argparse
 import base64
 import configparser
@@ -9,9 +9,10 @@ import os
 import re
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone, timedelta
+import pytz
+from datetime import datetime, timedelta
 from os.path import expanduser
-from urllib.parse import urlparse, urlunparse
+from urlparse import urlparse, urlunparse
 
 import boto3
 import requests
@@ -108,7 +109,7 @@ def get_arns_from_assertion(assertion):
         for aws_role in aws_roles:
             print ('[', i, ']: ', aws_role['RoleArn'])
             i += 1
-        selected_role_index = input("Selection: ")
+        selected_role_index = raw_input("Selection: ")
 
         # Basic sanity check of input
         if int(selected_role_index) > (len(aws_roles) - 1):
@@ -121,7 +122,7 @@ def get_arns_from_assertion(assertion):
 
     return selected_arn_dict
 
-def get_saml_assertion(response: object) -> object:
+def get_saml_assertion(response):
     """Parses a requests.Response object that contains a SAML assertion.
     Returns an base64 encoded SAML Assertion if one is found"""
    # Decode the requests.Response object and extract the SAML assertion
@@ -162,7 +163,7 @@ def get_user_creds():
         username = os.environ.get("OKTA_USERNAME")
     # Otherwise just ask the user
     else:
-        username = input("Username: ")
+        username = raw_input("Username: ")
     # Set prompt to include the user name, since username could be set
     # via OKTA_USERNAME env and user might not remember.
     passwd_prompt = "Password for {}: ".format(username)
@@ -181,7 +182,7 @@ def get_user_input(message,default):
     via keyboard with message. Returns user's input or if user doesn't
     enter input will return the default."""
     message_with_default = message + " [{}]: ".format(default)
-    user_input = input(message_with_default)
+    user_input = raw_input(message_with_default)
     print("")
     if len(user_input) == 0:
         return default
@@ -457,7 +458,7 @@ def write_aws_creds(aws_config_file,profile,access_key,secret_key,token,
 
 def write_sid_file(sid_file,sid):
     """Writes a given sid to a file. Returns nothing"""
-    sid_cache_file = os.open(sid_file,os.O_WRONLY|os.O_CREAT,mode=0o600)
+    sid_cache_file = os.open(sid_file,os.O_WRONLY|os.O_CREAT, 0o600)
     os.write(sid_cache_file,sid.encode())
     os.close(sid_cache_file)
 
@@ -537,9 +538,9 @@ def main():
 
     # Print message about aws_creds if verbose is set
     if args.verbose == True:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(pytz.utc)
         valid_duration = aws_creds['Expiration'] - now
-        valid_minutes = math.ceil(valid_duration / timedelta(minutes=1))
+        valid_minutes = math.ceil(valid_duration.total_seconds() / 60 )
         cred_details = ("Credentials for the profile {} have been set. "
                         "They will expire in {} minutes.".format(profile_name,
                         valid_minutes))
