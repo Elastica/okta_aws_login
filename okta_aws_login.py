@@ -78,6 +78,8 @@ def get_arns_from_assertion(assertion):
     Returns a dict with RoleArn, PrincipalArn & SAMLAssertion that can be
     used to call assume_role_with_saml"""
     # Parse the returned assertion and extract the principle and role ARNs
+
+    aws_roles = []
     root = ET.fromstring(base64.b64decode(assertion))
     urn = "{urn:oasis:names:tc:SAML:2.0:assertion}"
     urn_attribute = urn + "Attribute"
@@ -87,18 +89,39 @@ def get_arns_from_assertion(assertion):
         if (saml2attribute.get('Name') == role_url):
             for saml2attributevalue in saml2attribute.iter(urn_attributevalue):
                 arn_text = saml2attributevalue.text
-    arns = arn_text.split(',')
-    # Create dict to be used to call assume_role_with_saml
-    arn_dict = {}
-    for arn in arns:
-        if ":role/" in arn:
-            arn_dict['RoleArn'] = arn
-        elif ":saml-provider/":
-            arn_dict['PrincipalArn'] = arn
-    arn_dict['SAMLAssertion'] = assertion
-    return arn_dict
+                arns = arn_text.split(',')
+                # Create dict to be used to call assume_role_with_saml
+                arn_dict = {}
+                for arn in arns:
+                    if ":role/" in arn:
+                        arn_dict['RoleArn'] = arn
+                    elif ":saml-provider/":
+                        arn_dict['PrincipalArn'] = arn
+                arn_dict['SAMLAssertion'] = assertion
+                aws_roles.append(arn_dict)
 
-def get_saml_assertion(response):
+    # If there is more than one role user is allowed to assume, ask the user which one they want,
+    # otherwise just proceed
+    if len(aws_roles) > 1:
+        i = 0
+        print("Please choose the role you would like to assume:")
+        for aws_role in aws_roles:
+            print ('[', i, ']: ', aws_role['RoleArn'])
+            i += 1
+        selected_role_index = input("Selection: ")
+
+        # Basic sanity check of input
+        if int(selected_role_index) > (len(aws_roles) - 1):
+            print('You selected an invalid role index, please try again')
+            sys.exit(1)
+
+        selected_arn_dict = aws_roles[int(selected_role_index)]
+    else:
+        selected_arn_dict = aws_roles[0]
+
+    return selected_arn_dict
+
+def get_saml_assertion(response: object) -> object:
     """Parses a requests.Response object that contains a SAML assertion.
     Returns an base64 encoded SAML Assertion if one is found"""
    # Decode the requests.Response object and extract the SAML assertion
@@ -485,6 +508,8 @@ def main():
         write_sid_file(sid_cache_file,response.cookies['sid'])
     # Get arns from the assertion and the AWS creds from STS
     saml_dict = get_arns_from_assertion(assertion)
+    print("Getting temp credentials for ", saml_dict['RoleArn'], "role")
+
     aws_creds = get_sts_token(saml_dict['RoleArn'],
                           saml_dict['PrincipalArn'],
                           saml_dict['SAMLAssertion'])
